@@ -108,12 +108,9 @@ Le PVC alloue un volume persistant :
 
 ---
 
-### Notes Importantes
-1. Avant de démarrer, configurez les valeurs des variables d'environnement dans un fichier `.env` (ou ajoutez-les directement dans votre environnement Kubernetes).
-2. Les valeurs du Secret sont encodées en Base64, pensez à les reconfigurer si nécessaire.
-3. Sur un environnement local :
-   - Utilisez `docker-compose` pour un déploiement rapide.
-4. Sur un cluster Kubernetes :
-   - Assurez-vous que les volumes sont correctement configurés pour votre environnement.
+## Interface Utilisateur
 
+L'image ci-dessous montre à quoi ressemble l'interface de connexion de l'application **PayMyBuddy** après un déploiement réussi.
+
+![Interface de connexion](images/paymybuddy-login.png)
 --- 
