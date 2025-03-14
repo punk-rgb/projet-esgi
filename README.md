@@ -1,28 +1,119 @@
-# Choisir l'enonce en fonction de votre langue | Choosing the right advert for your language
+# Configuration de PayMyBuddy
 
-[![English](https://img.shields.io/badge/lang-en-red.svg)](https://github.com/ulrich-sun/projet-esgi/blob/main/enonce-en.md)
-[![français](https://img.shields.io/badge/lang-fr-blue.svg)](https://github.com/ulrich-sun/projet-esgi/blob/main/enonce-fr.md)
+Ce repository contient les configurations nécessaires pour déployer l'application **PayMyBuddy** à l'aide de Docker Compose et Kubernetes. Voici un aperçu des différents fichiers et leur rôle dans l'architecture globale.
 
+---
 
-# Conseils
+## Table des Matières
+1. [Docker Compose](#docker-compose)
+2. [Déploiement Kubernetes](#déploiement-kubernetes)
+   - [Backend Deployment](#backend-deployment)
+   - [Base de Données (MySQL)](#base-de-données-mysql)
+3. [ConfigMap](#configmap)
+4. [Secret](#secret)
+5. [Services](#services)
+6. [Persistent Volume Claim (PVC)](#persistent-volume-claim-pvc)
 
-- Pour travailler plus efficacement, commencez par forker ce dépôt.
-- Clonez votre fork sur votre serveur.
-- Créez les dossiers de travail et les fichiers nécessaires.
-- Utilisez les workflows Git pour sauvegarder l’ensemble de vos travaux sur votre dépôt GitHub.
-- Votre dépôt GitHub peut servir de portfolio pour certains, il est donc important de bien le structurer.
-- Je vous propose une stack vagrant dans le dossier **stack**
-    pour lancer cette stack vous aurez besoin de VirtualBox en version 7.0.20 et de vagrant en version 2.4.1
-    vous devez vous rendre dans le dossier stack 
-    en fonction de votre terminal de travail sous windows vous devez creer une variable pour le choix du script 
-    si vous etes sur CMD alors c'est set SCRIPT_NAME="k3s.sh"
-    si vous etes sur Powershell alors c'est $env:SCRIPT_NAME="k3s.sh"
-    Une fois la variable configurer vous lancez la commande vagrant up
+---
 
-# Tips
-- To work more efficiently, start by forking this repository.
-- Clone your fork to your server.
-- Create the necessary working folders and files.
-- Use Git workflows to back up all your work to your GitHub repository.
-- Your GitHub repository can serve as a portfolio for some, so it’s important to structure it well.
-    I am providing a Vagrant stack in the stack folder. To launch this stack, you will need VirtualBox version 7.0.20 and Vagrant version 2.4.1. You should navigate to the stack folder. Depending on your working terminal in Windows, you need to create a variable for the script choice. If you are using CMD, then it's set SCRIPT_NAME="k3s.sh". If you are using PowerShell, then it's $env:SCRIPT_NAME="k3s.sh". Once the variable is configured, you run the command vagrant up.
+## Docker Compose
+
+### Fichier : `dockercompose`  
+Ce fichier décrit une stack basique avec **Docker Compose**. 
+
+- **Services** :
+  - **paymybuddy-backend** : Conteneur contenant l'application backend Spring Boot.  
+    - Utilise l'image `punkgrb/paymybuddy-backend:latest`.
+    - Expose un port configurable via une variable d'environnement (`APP_PORT`).
+    - Se connecte à la base de données avec les informations d'environnement (`SPRING_DATASOURCE_*`).
+  - **paymybuddy-db** : Base de données MySQL.  
+    - Utilise l'image Docker `mysql:8`.
+    - Un volume persiste les données dans le chemin `/var/lib/mysql`.
+    - Initie la base de données avec des scripts se trouvant dans `/home/debian/initdb`.
+
+- **Volumes** :
+  - `db_data` : Persistance des fichiers de données pour MySQL.
+
+---
+
+## Déploiement Kubernetes
+
+### Backend Deployment
+
+#### Fichier : `paymybuddy-backend-deployment.yaml`
+Définit le déploiement du backend avec **Kubernetes** :
+- Déploie deux replicas pour garantir la redondance et la haute disponibilité.
+- Utilise les configurations suivantes :
+  - Les variables d'environnement (comme `APP_PORT` et `SPRING_DATASOURCE_*`) proviennent du **ConfigMap** et du **Secret**.
+- Assigne le conteneur backend à un port interne `8080`.
+
+---
+
+### Base de Données (MySQL)
+
+#### Fichier : `paymybuddy-db-deployment.yaml`
+Définit le déploiement de la base de données MySQL :
+- Réplications fixées à `1` (pas de base de données distribuée ici).  
+- Variable d'environnement pour MySQL : 
+  - **Mot de passe root** : Extrait d'un secret Kubernetes pour plus de sécurité.
+  - **Base de données** et **utilisateur** prédéfinis.
+- Déploie des volumes pour :
+  - La persistance des données (via un PVC).
+  - L'initialisation de la base avec des scripts via un `ConfigMap`.
+
+---
+
+## ConfigMap
+
+#### Fichier : `paymybuddy-configmap.yaml`
+Le ConfigMap stocke des variables non sensibles nécessaires pour le déploiement, telles que :
+- `APP_PORT` : Le port exposé par l'application backend.
+- `SPRING_DATASOURCE_URL` : URL de la connexion MySQL (exemple : `jdbc:mysql://paymybuddy-db:3306/db_paymybuddy`).
+- `SPRING_DATASOURCE_USERNAME` : Nom d'utilisateur pour la base MySQL.
+
+---
+
+## Secret
+
+#### Fichier : `paymybuddy-secret.yaml`
+Le Secret contient des données sensibles encodées en Base64, comme :
+- `MYSQL_ROOT_PASSWORD` : Mot de passe root d'administration MySQL.
+- `MYSQL_PASSWORD` : Mot de passe pour l'utilisateur principal MySQL utilisé par le backend.
+
+---
+
+## Services
+
+#### Fichier : `paymybuddy-service.yaml`
+Le service expose le backend à l'intérieur ou à l'extérieur du cluster :
+- **Backend Service** :
+  - Type : `ClusterIP` dans la majorité des cas pour les communications internes.
+  - Configure les `ports` entre le conteneur et l'extérieur.
+- **Exposition Publique** (optionnelle) :
+  - Défini comme service de type `NodePort`.
+  - Le backend sera accessible via un port Node précis (par exemple, `30007`).
+
+#### Fichier : `paymybuddy-db-service.yaml`
+Expose la base de données MySQL uniquement à l'intérieur du cluster Kubernetes, permettant au conteneur `paymybuddy-backend` de communiquer avec le conteneur de la base de données.
+
+---
+
+## Persistent Volume Claim (PVC)
+
+#### Fichier : `mysql-pvc.yaml`
+Le PVC alloue un volume persistant :
+- Mode d'accès `ReadWriteOnce` : Le volume est utilisé par un seul noeud à la fois.
+- Capacité : 5 Go.
+- Assure la persistance des données MySQL en cas de redémarrage du pod.
+
+---
+
+### Notes Importantes
+1. Avant de démarrer, configurez les valeurs des variables d'environnement dans un fichier `.env` (ou ajoutez-les directement dans votre environnement Kubernetes).
+2. Les valeurs du Secret sont encodées en Base64, pensez à les reconfigurer si nécessaire.
+3. Sur un environnement local :
+   - Utilisez `docker-compose` pour un déploiement rapide.
+4. Sur un cluster Kubernetes :
+   - Assurez-vous que les volumes sont correctement configurés pour votre environnement.
+
+--- 
