@@ -1,1 +1,33 @@
+version: '3.8'
 
+services:
+  paymybuddy-backend:
+    image: punkgrb/paymybuddy-backend:latest
+    container_name: paymybuddy-backend
+    restart: always
+    ports:
+      - "${APP_PORT}:8080" # Use environment variable for app port
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+    depends_on:
+      - paymybuddy-db
+
+  paymybuddy-db:
+    image: mysql:8
+    container_name: paymybuddy-db
+    restart: always
+    ports:
+      - "${DB_PORT}:3306" # Use environment variable for DB port
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      - /home/debian/initdb:/docker-entrypoint-initdb.d
+
+volumes:
+  db_data:
